@@ -1,6 +1,7 @@
 use core::panic;
 use std::fs::{File};
 use std::io::{self, BufRead, BufReader};
+use std::cmp::max;
 
 pub enum Line {
     WhiteSpace(),
@@ -9,6 +10,7 @@ pub enum Line {
     Code(),
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct Count {
     pub total_lines: usize,
     pub white_lines: usize,
@@ -31,6 +33,122 @@ impl Count {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Analysis {
+    pub file_size_analyzers: Vec<FileSizeAnalyzer>,
+}
+
+impl Analysis {
+    pub fn new() -> Self {
+        Analysis {
+            file_size_analyzers: vec![],
+        }
+    }
+
+    pub fn add_analyzer(&mut self, analyzer: FileSizeAnalyzer) {
+        self.file_size_analyzers.push(analyzer);
+    }
+
+    pub fn set_analyzers(&mut self, analyzers: Vec<FileSizeAnalyzer>) {
+        self.file_size_analyzers = analyzers;
+    }
+
+    pub fn print_summary_as_singles(&self) {
+        for analyzer in &self.file_size_analyzers {
+            analyzer.print_single_summary();
+        }
+    }
+
+    pub fn print_summary_as_table(&self) {
+        let paths: Vec<String> = self.file_size_analyzers.iter().map(|a| a.path.clone()).collect();
+        let counts: Vec<Count> = self.file_size_analyzers.iter().map(|a| a.count).collect();
+        Self::print_summary(&paths, &counts);
+    }
+
+fn print_summary(paths: &Vec<String>, counts: &Vec<Count>) {
+        // Compute file column width dynamically based on the longest file path
+        // (ensure it's at least wide enough for the "File" header and a practical minimum)
+        let longest_path = paths.iter().map(|p| p.len()).max().unwrap_or(0);
+        let file_width = max(18, max("File".len(), longest_path));
+
+        // Keep numeric columns fixed (can also be made dynamic if you want)
+        let num_width = 12;
+
+        // Total width for the dashed separators
+        // Pattern per numeric column is " | {:>num_width$} " => num_width + 3 chars
+        // File column is " | {:<file_width$} " => file_width + 3 chars
+        // Plus the leading '|' and trailing '|' => +2
+        let total_width = (file_width + 3) + 5 * (num_width + 3) + 2;
+
+        // Header separator
+        println!("{}", "-".repeat(total_width));
+
+        // Header row
+        println!(
+            "| {:<file_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} |",
+            "File", "Total", "White", "Comments", "Long Cmt", "Code",
+            file_width = file_width, num_width = num_width
+        );
+
+        // Header separator
+        println!("{}", "-".repeat(total_width));
+
+        // Rows
+        for (path, count) in paths.iter().zip(counts.iter()) {
+            println!(
+                "| {:<file_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} |",
+                path,
+                count.total_lines,
+                count.white_lines,
+                count.comment_lines,
+                count.long_comment_lines,
+                count.code_lines,
+                file_width = file_width,
+                num_width = num_width
+            );
+        }
+
+        // Row separator
+        println!("{}", "-".repeat(total_width));
+
+        // Totals
+        let total = counts.iter().fold(
+            Count {
+                total_lines: 0,
+                white_lines: 0,
+                comment_lines: 0,
+                long_comment_lines: 0,
+                code_lines: 0,
+            },
+            |mut acc, c| {
+                acc.total_lines += c.total_lines;
+                acc.white_lines += c.white_lines;
+                acc.comment_lines += c.comment_lines;
+                acc.long_comment_lines += c.long_comment_lines;
+                acc.code_lines += c.code_lines;
+                acc
+            },
+        );
+
+        // Totals row
+        println!(
+            "| {:<file_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} | {:>num_width$} |",
+            "TOTAL",
+            total.total_lines,
+            total.white_lines,
+            total.comment_lines,
+            total.long_comment_lines,
+            total.code_lines,
+            file_width = file_width,
+            num_width = num_width
+        );
+
+        // Final separator
+        println!("{}", "-".repeat(total_width));
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct FileSizeAnalyzer {
     pub path: String,
     pub count: Count,
@@ -120,11 +238,11 @@ impl FileSizeAnalyzer {
     }
 
     fn line_processor(line: &str, trailing_comment: bool) -> (Line, bool) { 
-        if line.trim().starts_with("**/"){
+        if line.trim().starts_with("**/") || line.trim().starts_with("*/"){
             (Line::LongComment(), false)
         } else if line.trim().is_empty(){
             (Line::WhiteSpace(), trailing_comment)
-        } else if line.trim_start().starts_with("/**") {
+        } else if line.trim_start().starts_with("/**"){
             (Line::LongComment(), true)
         } else if trailing_comment{
             (Line::LongComment(), true)
