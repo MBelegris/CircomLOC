@@ -1,25 +1,24 @@
 pub mod file_analyzer;
+pub mod args;
 
 use file_analyzer::{FileSizeAnalyzer};
-use std::env;
 use walkdir::{DirEntry, WalkDir};
 
 use crate::file_analyzer::*;
+use crate::args::Args;
 
 fn main() {
     // cargo run -- <file-or-directory-path>
+    // default is current dir
 
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        panic!("Please provide a file path as an argument.");
-    }  
-    let path = &args[1];
+    let args: Args = Args::parse();
+    let path = &args.circom_dir;
 
     let walker = WalkDir::new(path).into_iter();
 
     let mut analyzers: Vec<FileSizeAnalyzer> = vec![];
 
-    walker.filter_map(|e| e.ok()).filter(only_circom_files).enumerate().for_each(
+    walker.filter_map(|e| e.ok()).filter(only_noir_files).enumerate().for_each(
         |(_i, entry)| {
             let path = entry.path();
             let path_str = path.to_str().unwrap();
@@ -47,4 +46,8 @@ fn main() {
 
 fn only_circom_files(entry: &DirEntry) -> bool {
     entry.path().is_file() && entry.path().extension().map_or(false, |ext| ext == "circom")
+}
+
+fn only_noir_files(entry: &DirEntry) -> bool {
+    entry.path().is_file() && entry.path().extension().map_or(false, |ext| ext == "nr")
 }
