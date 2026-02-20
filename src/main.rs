@@ -47,3 +47,7 @@ fn main() {
 fn only_circom_files(entry: &DirEntry) -> bool {
     entry.path().is_file() && entry.path().extension().map_or(false, |ext| ext == "circom")
 }
+
+fn only_noir_files(entry: &DirEntry) -> bool {
+    entry.path().is_file() && entry.path().extension().map_or(false, |ext| ext == "nr")
+}
